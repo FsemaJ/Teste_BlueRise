@@ -1,0 +1,287 @@
+openapi: 3.0.0
+info:
+  title: BlueRise API
+  version: 1.0.0
+  description: API para gerenciamento de usuários, autenticação e API Keys.
+
+servers:
+  - url: http://localhost:3000/api
+    description: Servidor de Desenvolvimento Local
+
+tags:
+  - name: Autenticação
+    description: Operações relacionadas a registro, login e gerenciamento de tokens.
+  - name: Usuários
+    description: Operações relacionadas ao perfil do usuário.
+  - name: API Keys
+    description: Geração e gerenciamento de chaves de API.
+  - name: Administração
+    description: Rotas protegidas por API Key para funcionalidades administrativas.
+  - name: Saúde
+    description: Verificação de saúde da aplicação.
+
+paths:
+  /auth/register:
+    post:
+      tags:
+        - Autenticação
+      summary: Registra um novo usuário
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+                - email
+                - password
+              properties:
+                name:
+                  type: string
+                  example: John Doe
+                email:
+                  type: string
+                  format: email
+                  example: john.doe@example.com
+                password:
+                  type: string
+                  format: password
+                  example: StrongP@ssw0rd!
+      responses:
+        "201":
+          description: Usuário registrado com sucesso.
+        "400":
+          description: Erro de validação.
+        "409":
+          description: E-mail já registrado.
+
+  /auth/login:
+    post:
+      tags:
+        - Autenticação
+      summary: Autentica um usuário e retorna tokens
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: john.doe@example.com
+                password:
+                  type: string
+                  format: password
+                  example: StrongP@ssw0rd!
+      responses:
+        "200":
+          description: Login bem-sucedido.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token:
+                    type: string
+                  refresh_token:
+                    type: string
+        "401":
+          description: Credenciais inválidas ou conta inativa/pendente.
+        "429":
+          description: Muitas tentativas de login.
+
+  /auth/refresh:
+    post:
+      tags:
+        - Autenticação
+      summary: Emite um novo access token usando um refresh token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - refresh_token
+              properties:
+                refresh_token:
+                  type: string
+      responses:
+        "200":
+          description: Novo access token emitido.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token:
+                    type: string
+        "401":
+          description: Token de atualização inválido ou expirado.
+
+  /auth/logout:
+    post:
+      tags:
+        - Autenticação
+      summary: Revoga o refresh token, deslogando o usuário
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - refresh_token
+              properties:
+                refresh_token:
+                  type: string
+      responses:
+        "200":
+          description: Logout realizado com sucesso.
+        "400":
+          description: Token de atualização não fornecido.
+
+  /users/me:
+    get:
+      tags:
+        - Usuários
+      summary: Retorna o perfil do usuário autenticado
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Perfil do usuário.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  data:
+                    type: object
+                    properties:
+                      user:
+                        type: object # Você pode definir um esquema mais detalhado para o User aqui
+                        properties:
+                          _id: { type: string }
+                          name: { type: string }
+                          email: { type: string }
+                          roles: { type: array, items: { type: string } }
+                          status: { type: string }
+                          createdAt: { type: string, format: date-time }
+        "401":
+          description: Não autorizado.
+        "404":
+          description: Usuário não encontrado.
+
+  /apikeys:
+    post:
+      tags:
+        - API Keys
+      summary: Gera uma nova API Key (apenas admin)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  example: Minha API Key de Teste
+                permissions:
+                  type: array
+                  items:
+                    type: string
+                  example: ["read:users", "write:products"]
+                expiresAt:
+                  type: string
+                  format: date-time
+                  example: "2025-12-31T23:59:59Z"
+      responses:
+        "201":
+          description: API Key gerada com sucesso.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string }
+                  message: { type: string }
+                  data:
+                    type: object
+                    properties:
+                      apiKey:
+                        {
+                          type: string,
+                          description: "A chave API gerada (mostrada apenas uma vez)",
+                        }
+                      apiKeyId: { type: string }
+                      name: { type: string }
+                      permissions: { type: array, items: { type: string } }
+                      expiresAt: { type: string, format: date-time }
+        "401":
+          description: Não autorizado.
+        "403":
+          description: Acesso negado (não é admin).
+
+  /admin/dashboard:
+    get:
+      tags:
+        - Administração
+      summary: Retorna dados do painel administrativo (protegido por API Key)
+      security:
+        - apiKeyAuth: []
+      responses:
+        "200":
+          description: Dados do painel administrativo.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string }
+                  message: { type: string }
+                  data: { type: object }
+        "401":
+          description: API Key inválida ou não fornecida.
+
+  /healthz:
+    get:
+      tags:
+        - Saúde
+      summary: Verifica o status das conexões com MongoDB e Redis
+      responses:
+        "200":
+          description: Status de saúde OK.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: "ok" }
+                  mongodb: { type: string, example: "connected" }
+                  redis: { type: string, example: "connected" }
+                  timestamp: { type: string, format: date-time }
+        "500":
+          description: Falha na verificação de saúde.
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    apiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
