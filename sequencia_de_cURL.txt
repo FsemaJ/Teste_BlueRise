@@ -1,0 +1,176 @@
+# ==============================================================================
+# SEQUÊNCIA DE TESTE DA API COM cURL
+# ==============================================================================
+
+# PRÉ-REQUISITOS:
+# 1. Certifique-se de que seu servidor backend está RODANDO (ex: npm run dev ou npm start).
+# 2. MongoDB e Redis devem estar acessíveis.
+# 3. Este script usa 'grep -oP' para extrair tokens. Se você tiver 'jq' instalado,
+#    pode substituir as linhas de extração por:
+#    TOKEN=$(echo "$RESPONSE" | jq -r '.access_token')
+#    ou
+#    TOKEN=$(echo "$RESPONSE" | jq -r '.refresh_token')
+#    ou
+#    TOKEN=$(echo "$RESPONSE" | jq -r '.data.apiKey')
+# 4. Para Windows, use um terminal como Git Bash ou WSL para melhor compatibilidade com os comandos.
+
+# ==============================================================================
+# CONFIGURAÇÃO INICIAL DE VARIÁVEIS
+# ==============================================================================
+
+# Credenciais para o usuário de teste normal
+USER_EMAIL="curltest@example.com"
+USER_PASSWORD="CurlPassword123!"
+USER_NAME="Curl Test User"
+
+# Credenciais para o usuário administrador (será configurado no MongoDB)
+ADMIN_EMAIL="admin@example.com"
+ADMIN_PASSWORD="AdminPassword123!"
+ADMIN_NAME="Admin User"
+
+# Variáveis para armazenar tokens (serão preenchidas durante o teste)
+VERIFY_EMAIL_TOKEN=""
+ACCESS_TOKEN=""
+REFRESH_TOKEN=""
+ADMIN_ACCESS_TOKEN=""
+ADMIN_REFRESH_TOKEN=""
+GENERATED_API_KEY=""
+
+echo "Variáveis de usuário e admin definidas."
+echo "--------------------------------------------------------------------------------"
+
+# ==============================================================================
+# FLUXO DE AUTENTICAÇÃO E USUÁRIOS (USUÁRIO NORMAL)
+# ==============================================================================
+
+echo "1. POST /auth/register - Registrando usuário normal..."
+REGISTER_RESPONSE=$(curl -X POST http://localhost:8080/api/auth/register \
+-H 'Content-Type: application/json' \
+-d "{
+    \"name\": \"$USER_NAME\",
+    \"email\": \"$USER_EMAIL\",
+    \"password\": \"$USER_PASSWORD\"
+}")
+echo "Resposta do Registro: $REGISTER_RESPONSE"
+echo "--------------------------------------------------------------------------------"
+echo "ATENÇÃO: Copie o TOKEN DE VERIFICAÇÃO do log do seu servidor para a variável VERIFY_EMAIL_TOKEN."
+echo "Exemplo: VERIFY_EMAIL_TOKEN=\"SEU_TOKEN_AQUI\""
+echo "PAUSE AQUI PARA OBTER O TOKEN DO LOG DO SERVIDOR."
+read -p "Pressione Enter para continuar após definir VERIFY_EMAIL_TOKEN..."
+
+# Exemplo de como você definiria o token após copiá-lo do log:
+# VERIFY_EMAIL_TOKEN="COLE_O_TOKEN_AQUI"
+# echo "Token de verificação definido: $VERIFY_EMAIL_TOKEN"
+# echo "--------------------------------------------------------------------------------"
+
+echo "2. POST /auth/verify-email - Verificando e-mail do usuário normal..."
+VERIFY_RESPONSE=$(curl -X POST http://localhost:8080/api/auth/verify-email \
+-H 'Content-Type: application/json' \
+-d "{
+    \"token\": \"$VERIFY_EMAIL_TOKEN\"
+}")
+echo "Resposta da Verificação: $VERIFY_RESPONSE"
+echo "--------------------------------------------------------------------------------"
+
+echo "3. POST /auth/login - Fazendo login do usuário normal..."
+LOGIN_RESPONSE=$(curl -X POST http://localhost:8080/api/auth/login \
+-H 'Content-Type: application/json' \
+-d "{
+    \"email\": \"$USER_EMAIL\",
+    \"password\": \"$USER_PASSWORD\"
+}")
+echo "Resposta do Login: $LOGIN_RESPONSE"
+
+ACCESS_TOKEN=$(echo "$LOGIN_RESPONSE" | grep -oP '"access_token":\s*"\K[^"]+')
+REFRESH_TOKEN=$(echo "$LOGIN_RESPONSE" | grep -oP '"refresh_token":\s*"\K[^"]+')
+
+echo "Access Token: $ACCESS_TOKEN"
+echo "Refresh Token: $REFRESH_TOKEN"
+echo "--------------------------------------------------------------------------------"
+
+echo "4. GET /users/me - Obtendo perfil do usuário normal..."
+ME_RESPONSE=$(curl -X GET http://localhost:8080/api/users/me \
+-H "Authorization: Bearer $ACCESS_TOKEN")
+echo "Resposta do Perfil: $ME_RESPONSE"
+echo "--------------------------------------------------------------------------------"
+
+echo "5. POST /auth/refresh - Atualizando Access Token..."
+REFRESH_RESPONSE=$(curl -X POST http://localhost:8080/api/auth/refresh \
+-H 'Content-Type: application/json' \
+-d "{
+    \"refresh_token\": \"$REFRESH_TOKEN\"
+}")
+echo "Resposta do Refresh: $REFRESH_RESPONSE"
+
+NEW_ACCESS_TOKEN=$(echo "$REFRESH_RESPONSE" | grep -oP '"access_token":\s*"\K[^"]+')
+ACCESS_TOKEN="$NEW_ACCESS_TOKEN" # Atualiza o ACCESS_TOKEN para o novo
+echo "Novo Access Token: $ACCESS_TOKEN"
+echo "--------------------------------------------------------------------------------"
+
+echo "6. POST /auth/logout - Fazendo logout do usuário normal..."
+LOGOUT_RESPONSE=$(curl -X POST http://localhost:8080/api/auth/logout \
+-H 'Content-Type: application/json' \
+-d "{
+    \"refresh_token\": \"$REFRESH_TOKEN\"
+}")
+echo "Resposta do Logout: $LOGOUT_RESPONSE"
+echo "--------------------------------------------------------------------------------"
+
+# ==============================================================================
+# CONFIGURAÇÃO DE USUÁRIO ADMINISTRADOR NO MONGODB (MANUAL)
+# ==============================================================================
+
+echo "PARA TESTAR ROTAS DE ADMIN, VOCÊ PRECISA DE UM USUÁRIO COM A ROLE 'admin'."
+echo "1. Registre o usuário admin (se ainda não o fez, use as variáveis ADMIN_EMAIL/ADMIN_PASSWORD)."
+echo "   curl -X POST http://localhost:8080/api/auth/register -H 'Content-Type: application/json' -d '{\"name\":\"$ADMIN_NAME\",\"email\":\"$ADMIN_EMAIL\",\"password\":\"$ADMIN_PASSWORD\"}'"
+echo "2. Verifique o e-mail do admin (copie o token do log do servidor)."
+echo "   VERIFY_EMAIL_TOKEN=\"SEU_TOKEN_ADMIN_AQUI\""
+echo "   curl -X POST http://localhost:8080/api/auth/verify-email -H 'Content-Type: application/json' -d '{\"token\":\"$VERIFY_EMAIL_TOKEN\"}'"
+echo "3. CONECTE-SE AO SEU MONGODB (ex: mongosh \"mongodb://localhost:27017/did_agent\")"
+echo "   E EXECUTE O SEGUINTE COMANDO PARA ADICIONAR A ROLE 'admin':"
+echo "   use did_agent;"
+echo "   db.users.updateOne({ email: \"$ADMIN_EMAIL\" }, { \$addToSet: { roles: \"admin\" } });"
+echo "   VERIFIQUE: db.users.findOne({ email: \"$ADMIN_EMAIL\" }); (deve mostrar 'roles: [\"user\", \"admin\"]')"
+echo "PAUSE AQUI PARA CONFIGURAR O USUÁRIO ADMIN NO MONGODB."
+read -p "Pressione Enter para continuar após configurar o admin no MongoDB..."
+echo "--------------------------------------------------------------------------------"
+
+# ==============================================================================
+# FLUXO DE ADMIN (APÓS CONFIGURAÇÃO NO MONGODB)
+# ==============================================================================
+
+echo "7. POST /auth/login - Fazendo login do usuário administrador..."
+LOGIN_ADMIN_RESPONSE=$(curl -X POST http://localhost:8080/api/auth/login \
+-H 'Content-Type: application/json' \
+-d "{
+    \"email\": \"$ADMIN_EMAIL\",
+    \"password\": \"$ADMIN_PASSWORD\"
+}")
+echo "Resposta do Login Admin: $LOGIN_ADMIN_RESPONSE"
+
+ADMIN_ACCESS_TOKEN=$(echo "$LOGIN_ADMIN_RESPONSE" | grep -oP '"access_token":\s*"\K[^"]+')
+ADMIN_REFRESH_TOKEN=$(echo "$LOGIN_ADMIN_RESPONSE" | grep -oP '"refresh_token":\s*"\K[^"]+')
+
+echo "Admin Access Token: $ADMIN_ACCESS_TOKEN"
+echo "Admin Refresh Token: $ADMIN_REFRESH_TOKEN"
+echo "--------------------------------------------------------------------------------"
+
+echo "8. POST /apikeys - Gerando API Key como administrador..."
+APIKEY_RESPONSE=$(curl -X POST http://localhost:8080/api/apikeys \
+-H 'Content-Type: application/json' \
+-H "Authorization: Bearer $ADMIN_ACCESS_TOKEN" \
+-d "{
+    \"name\": \"MinhaNovaAPIKey\"
+}")
+echo "Resposta da Geração de API Key: $APIKEY_RESPONSE"
+
+GENERATED_API_KEY=$(echo "$APIKEY_RESPONSE" | grep -oP '"apiKey":\s*"\K[^"]+')
+echo "API Key Gerada: $GENERATED_API_KEY"
+echo "--------------------------------------------------------------------------------"
+
+echo "9. GET /healthz - Verificando a saúde da aplicação..."
+HEALTH_RESPONSE=$(curl -X GET http://localhost:8080/api/healthz)
+echo "Resposta do Health Check: $HEALTH_RESPONSE"
+echo "--------------------------------------------------------------------------------"
+
+echo "FIM DA SEQUÊNCIA DE TESTES cURL."
