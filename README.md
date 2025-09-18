@@ -12,7 +12,7 @@ Crie um arquivo `.env` na raiz do projeto com as seguintes variáveis. Você pod
 
 ```
 PORT=8080
-MONGO_URI=mongodb+srv://dbUser:1O8H3DSnn7Air3oh@cluster0.v9xipid.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0
+MONGO_URI=mongodb+srv://novoUsuario:minhaSenhaSegura@cluster0.v9xipid.mongodb.net
 REDIS_URL=redis://localhost:6379
 CORS_ALLOWED_ORIGINS=http://localhost:3000
 
